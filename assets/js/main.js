@@ -32,6 +32,7 @@ scene.add(light);
 const boxSize = 10;
 const radius = 0.5;
 const limit = boxSize / 2 - radius;
+const half = boxSize / 2;
 
 const boxGeometry = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
 const glassMaterial = new THREE.MeshPhysicalMaterial({
@@ -53,20 +54,74 @@ const edges = new THREE.LineSegments(
 );
 scene.add(edges);
 
-const sphere = new THREE.Mesh(
-    new THREE.SphereGeometry(radius, 32, 32),
-    new THREE.MeshStandardMaterial({ color: 0xff7043, roughness: 0.35 })
-);
-scene.add(sphere);
+// ===== Esferas =====
+const sphereGeometry = new THREE.SphereGeometry(radius, 32, 32);
+const sphereColors = [
+    0xff7043, 0x42a5f5, 0x66bb6a, 0xffca28,
+    0xab47bc, 0xef5350, 0x26c6da, 0xd4e157
+];
+const spheres = [];
 
-const DEFAULT_VELOCITY = { x: 0.035, y: 0.027, z: 0.041 };
-const velocity = new THREE.Vector3(
-    DEFAULT_VELOCITY.x,
-    DEFAULT_VELOCITY.y,
-    DEFAULT_VELOCITY.z
-);
+const DEFAULT_BASE_SPEED = { x: 0.035, y: 0.027, z: 0.041 };
+const baseSpeed = { ...DEFAULT_BASE_SPEED };
 
-// ===== Caja de controles: desplazadores de velocidad =====
+function randomSign() {
+    return Math.random() < 0.5 ? -1 : 1;
+}
+
+function addSphere() {
+    const mesh = new THREE.Mesh(
+        sphereGeometry,
+        new THREE.MeshStandardMaterial({
+            color: sphereColors[spheres.length % sphereColors.length],
+            roughness: 0.35
+        })
+    );
+    mesh.position.set(
+        THREE.MathUtils.randFloat(-limit, limit),
+        THREE.MathUtils.randFloat(-limit, limit),
+        THREE.MathUtils.randFloat(-limit, limit)
+    );
+    const velocity = new THREE.Vector3(
+        baseSpeed.x * randomSign(),
+        baseSpeed.y * randomSign(),
+        baseSpeed.z * randomSign()
+    );
+    scene.add(mesh);
+    spheres.push({ mesh, velocity });
+}
+
+function removeSphere() {
+    const s = spheres.pop();
+    if (!s) return;
+    scene.remove(s.mesh);
+    s.mesh.material.dispose();
+}
+
+function setSphereCount(n) {
+    while (spheres.length < n) addSphere();
+    while (spheres.length > n) removeSphere();
+}
+
+// Reescala la velocidad de todas las esferas conservando el sentido de cada eje
+function applyBaseSpeed() {
+    for (const s of spheres) {
+        ['x', 'y', 'z'].forEach((axis) => {
+            const dir = s.velocity[axis] >= 0 ? 1 : -1;
+            s.velocity[axis] = dir * baseSpeed[axis];
+        });
+    }
+}
+
+// ===== Caja de controles =====
+const countInput = document.getElementById('count');
+const countOut = document.getElementById('countOut');
+countInput.addEventListener('input', () => {
+    const n = parseInt(countInput.value, 10);
+    countOut.textContent = n;
+    setSphereCount(n);
+});
+
 const axisInputs = {
     x: document.getElementById('velX'),
     y: document.getElementById('velY'),
@@ -82,27 +137,99 @@ function bindAxis(axis) {
     const input = axisInputs[axis];
     const output = axisOutputs[axis];
     const apply = () => {
-        const value = parseFloat(input.value);
-        velocity[axis] = value;
+        const value = Math.abs(parseFloat(input.value));
+        baseSpeed[axis] = value;
         output.textContent = value.toFixed(3);
+        applyBaseSpeed();
     };
     input.addEventListener('input', apply);
-    apply();
+    output.textContent = Math.abs(parseFloat(input.value)).toFixed(3);
 }
-
 ['x', 'y', 'z'].forEach(bindAxis);
 
+let soundEnabled = document.getElementById('soundOn').checked;
+let masterVolume = parseFloat(document.getElementById('volume').value);
+document.getElementById('soundOn').addEventListener('change', (e) => {
+    soundEnabled = e.target.checked;
+});
+const volumeInput = document.getElementById('volume');
+const volumeOut = document.getElementById('volumeOut');
+volumeInput.addEventListener('input', () => {
+    masterVolume = parseFloat(volumeInput.value);
+    volumeOut.textContent = masterVolume.toFixed(2);
+});
+volumeOut.textContent = masterVolume.toFixed(2);
+
 document.getElementById('resetBtn').addEventListener('click', () => {
-    sphere.position.set(0, 0, 0);
     ['x', 'y', 'z'].forEach((axis) => {
-        axisInputs[axis].value = DEFAULT_VELOCITY[axis];
-        axisInputs[axis].dispatchEvent(new Event('input'));
+        axisInputs[axis].value = DEFAULT_BASE_SPEED[axis];
+        baseSpeed[axis] = DEFAULT_BASE_SPEED[axis];
+        axisOutputs[axis].textContent = DEFAULT_BASE_SPEED[axis].toFixed(3);
     });
+    for (const s of spheres) {
+        s.mesh.position.set(
+            THREE.MathUtils.randFloat(-limit, limit),
+            THREE.MathUtils.randFloat(-limit, limit),
+            THREE.MathUtils.randFloat(-limit, limit)
+        );
+        s.velocity.set(
+            baseSpeed.x * randomSign(),
+            baseSpeed.y * randomSign(),
+            baseSpeed.z * randomSign()
+        );
+    }
 });
 
-// Marcas de impacto: anillos que aparecen al tocar una cara y se desvanecen
-const half = boxSize / 2;
-const markerDuration = 0.7; // segundos que dura visible la marca
+// ===== Sonido de choque (Web Audio API) =====
+let audioCtx = null;
+let lastSoundAt = 0;
+
+function ensureAudio() {
+    if (!audioCtx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) audioCtx = new Ctx();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+window.addEventListener('pointerdown', ensureAudio);
+
+function playClack(intensity) {
+    if (!soundEnabled || masterVolume <= 0) return;
+    ensureAudio();
+    if (!audioCtx) return;
+
+    const t = performance.now();
+    if (t - lastSoundAt < 25) return; // evita saturar con choques simultaneos
+    lastSoundAt = t;
+
+    const now = audioCtx.currentTime;
+    const length = Math.floor(audioCtx.sampleRate * 0.14);
+    const buffer = audioCtx.createBuffer(1, length, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 3);
+    }
+
+    const src = audioCtx.createBufferSource();
+    src.buffer = buffer;
+
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 700 + intensity * 2600;
+    filter.Q.value = 1.1;
+
+    const gain = audioCtx.createGain();
+    gain.gain.value = Math.min(0.4, 0.08 + intensity * 0.5) * masterVolume;
+
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    src.start(now);
+    src.stop(now + 0.14);
+}
+
+// ===== Marcas de impacto contra las caras =====
+const markerDuration = 0.7;
 const activeMarkers = [];
 const markerGeometry = new THREE.RingGeometry(radius * 0.6, radius * 1.6, 32);
 
@@ -136,46 +263,146 @@ function updateMarkers(delta) {
     }
 }
 
+// ===== Chispas =====
+const MAX_BURSTS = 40;
+const sparkBursts = [];
+
+function spawnSparks(position, intensity, tint) {
+    if (sparkBursts.length >= MAX_BURSTS) return;
+
+    const count = 8 + Math.round(intensity * 10);
+    const positions = new Float32Array(count * 3);
+    const vels = [];
+    for (let i = 0; i < count; i++) {
+        positions[i * 3] = position.x;
+        positions[i * 3 + 1] = position.y;
+        positions[i * 3 + 2] = position.z;
+        vels.push(
+            new THREE.Vector3(
+                Math.random() * 2 - 1,
+                Math.random() * 2 - 1,
+                Math.random() * 2 - 1
+            ).normalize().multiplyScalar(THREE.MathUtils.randFloat(1.5, 4) * (0.6 + intensity))
+        );
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.PointsMaterial({
+        color: tint,
+        size: 0.14,
+        transparent: true,
+        opacity: 1,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+    });
+    const points = new THREE.Points(geo, mat);
+    scene.add(points);
+    sparkBursts.push({ points, geo, mat, vels, life: 0.45, maxLife: 0.45 });
+}
+
+function updateSparks(delta) {
+    for (let i = sparkBursts.length - 1; i >= 0; i--) {
+        const b = sparkBursts[i];
+        b.life -= delta;
+        const arr = b.geo.attributes.position.array;
+        for (let j = 0; j < b.vels.length; j++) {
+            arr[j * 3] += b.vels[j].x * delta;
+            arr[j * 3 + 1] += b.vels[j].y * delta;
+            arr[j * 3 + 2] += b.vels[j].z * delta;
+            b.vels[j].multiplyScalar(0.9);
+        }
+        b.geo.attributes.position.needsUpdate = true;
+        b.mat.opacity = Math.max(b.life / b.maxLife, 0);
+        if (b.life <= 0) {
+            scene.remove(b.points);
+            b.geo.dispose();
+            b.mat.dispose();
+            sparkBursts.splice(i, 1);
+        }
+    }
+}
+
+// ===== Colisiones =====
+const AXES = ['x', 'y', 'z'];
+const tmpNormal = new THREE.Vector3();
+const tmpRel = new THREE.Vector3();
+
+function collideWithWalls(s) {
+    for (const axis of AXES) {
+        const p = s.mesh.position[axis];
+        if (p >= limit || p <= -limit) {
+            s.velocity[axis] *= -1;
+            s.mesh.position[axis] = THREE.MathUtils.clamp(p, -limit, limit);
+
+            const contact = s.mesh.position.clone();
+            contact[axis] = Math.sign(p) * half;
+            const normal = new THREE.Vector3();
+            normal[axis] = -Math.sign(p);
+
+            const speed = Math.abs(s.velocity[axis]);
+            const intensity = THREE.MathUtils.clamp(speed / 0.12, 0.1, 1);
+            spawnMarker(contact, normal);
+            spawnSparks(contact, intensity, 0xfff2b0);
+            playClack(intensity);
+        }
+    }
+}
+
+function collidePair(a, b) {
+    tmpNormal.subVectors(b.mesh.position, a.mesh.position);
+    const dist = tmpNormal.length();
+    const minDist = radius * 2;
+    if (dist === 0 || dist >= minDist) return;
+
+    tmpNormal.multiplyScalar(1 / dist); // normal a -> b
+
+    // separar el solapamiento
+    const overlap = (minDist - dist) / 2;
+    a.mesh.position.addScaledVector(tmpNormal, -overlap);
+    b.mesh.position.addScaledVector(tmpNormal, overlap);
+
+    // choque elastico de masas iguales: se intercambia la componente normal
+    tmpRel.subVectors(a.velocity, b.velocity);
+    const sep = tmpRel.dot(tmpNormal);
+    if (sep <= 0) return; // ya se estan separando
+
+    a.velocity.addScaledVector(tmpNormal, -sep);
+    b.velocity.addScaledVector(tmpNormal, sep);
+
+    const contact = a.mesh.position.clone().addScaledVector(tmpNormal, radius);
+    const intensity = THREE.MathUtils.clamp(sep / 0.15, 0.15, 1);
+    spawnSparks(contact, intensity, 0xbdecff);
+    playClack(intensity);
+}
+
+// ===== Bucle =====
 let lastTime = performance.now();
 
 function animate() {
     const now = performance.now();
-    const delta = (now - lastTime) / 1000;
+    const delta = Math.min((now - lastTime) / 1000, 0.05);
     lastTime = now;
 
-    sphere.position.add(velocity);
+    for (const s of spheres) {
+        s.mesh.position.add(s.velocity);
+        collideWithWalls(s);
+    }
 
-    if (sphere.position.x >= limit || sphere.position.x <= -limit) {
-        velocity.x *= -1;
-        sphere.position.x = THREE.MathUtils.clamp(sphere.position.x, -limit, limit);
-        spawnMarker(
-            new THREE.Vector3(Math.sign(sphere.position.x) * half, sphere.position.y, sphere.position.z),
-            new THREE.Vector3(-Math.sign(sphere.position.x), 0, 0)
-        );
-    }
-    if (sphere.position.y >= limit || sphere.position.y <= -limit) {
-        velocity.y *= -1;
-        sphere.position.y = THREE.MathUtils.clamp(sphere.position.y, -limit, limit);
-        spawnMarker(
-            new THREE.Vector3(sphere.position.x, Math.sign(sphere.position.y) * half, sphere.position.z),
-            new THREE.Vector3(0, -Math.sign(sphere.position.y), 0)
-        );
-    }
-    if (sphere.position.z >= limit || sphere.position.z <= -limit) {
-        velocity.z *= -1;
-        sphere.position.z = THREE.MathUtils.clamp(sphere.position.z, -limit, limit);
-        spawnMarker(
-            new THREE.Vector3(sphere.position.x, sphere.position.y, Math.sign(sphere.position.z) * half),
-            new THREE.Vector3(0, 0, -Math.sign(sphere.position.z))
-        );
+    for (let i = 0; i < spheres.length; i++) {
+        for (let j = i + 1; j < spheres.length; j++) {
+            collidePair(spheres[i], spheres[j]);
+        }
     }
 
     updateMarkers(delta);
+    updateSparks(delta);
 
     controls.update();
     renderer.render(scene, camera);
 }
 
+setSphereCount(parseInt(countInput.value, 10));
 renderer.setAnimationLoop(animate);
 
 window.addEventListener('resize', () => {

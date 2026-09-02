@@ -55,6 +55,12 @@ canvas {
     border-radius: 14px;
     box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
     backdrop-filter: blur(6px);
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+}
+
+.control-group + .control-group {
+    margin-top: 12px;
 }
 
 .controls h2 {
@@ -91,6 +97,17 @@ canvas {
 
 .control:last-child {
     margin-bottom: 0;
+}
+
+.control--check {
+    grid-template-columns: 1fr auto;
+}
+
+.control--check input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #22d3ee;
+    cursor: pointer;
 }
 
 .control__name {

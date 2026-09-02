@@ -27,24 +27,49 @@
         <h2>Controles</h2>
 
         <div class="control-group">
-            <span class="control-group__title">Velocidad de la esfera</span>
+            <span class="control-group__title">Esferas</span>
+
+            <label class="control" for="count">
+                <span class="control__name">Cantidad</span>
+                <input type="range" id="count" min="1" max="24" step="1" value="4">
+                <output class="control__value" id="countOut">4</output>
+            </label>
+        </div>
+
+        <div class="control-group">
+            <span class="control-group__title">Velocidad base</span>
 
             <label class="control" for="velX">
                 <span class="control__name">Eje X</span>
-                <input type="range" id="velX" min="-0.12" max="0.12" step="0.001" value="0.035">
+                <input type="range" id="velX" min="0" max="0.12" step="0.001" value="0.035">
                 <output class="control__value" id="velXOut">0.035</output>
             </label>
 
             <label class="control" for="velY">
                 <span class="control__name">Eje Y</span>
-                <input type="range" id="velY" min="-0.12" max="0.12" step="0.001" value="0.027">
+                <input type="range" id="velY" min="0" max="0.12" step="0.001" value="0.027">
                 <output class="control__value" id="velYOut">0.027</output>
             </label>
 
             <label class="control" for="velZ">
                 <span class="control__name">Eje Z</span>
-                <input type="range" id="velZ" min="-0.12" max="0.12" step="0.001" value="0.041">
+                <input type="range" id="velZ" min="0" max="0.12" step="0.001" value="0.041">
                 <output class="control__value" id="velZOut">0.041</output>
+            </label>
+        </div>
+
+        <div class="control-group">
+            <span class="control-group__title">Sonido</span>
+
+            <label class="control control--check" for="soundOn">
+                <span class="control__name">Choques</span>
+                <input type="checkbox" id="soundOn" checked>
+            </label>
+
+            <label class="control" for="volume">
+                <span class="control__name">Volumen</span>
+                <input type="range" id="volume" min="0" max="1" step="0.01" value="0.6">
+                <output class="control__value" id="volumeOut">0.60</output>
             </label>
         </div>
 

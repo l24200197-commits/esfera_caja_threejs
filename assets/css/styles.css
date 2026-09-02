@@ -40,3 +40,131 @@ canvas {
     margin: 0;
     font-size: 0.9rem;
 }
+
+/* ===== Caja de controles ===== */
+.controls {
+    position: fixed;
+    z-index: 2;
+    top: 20px;
+    right: 20px;
+    width: 260px;
+    padding: 18px;
+    color: #eaf6ff;
+    background: linear-gradient(160deg, rgba(9, 24, 44, 0.92), rgba(5, 15, 30, 0.92));
+    border: 1px solid rgba(34, 211, 238, 0.35);
+    border-radius: 14px;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(6px);
+}
+
+.controls h2 {
+    margin: 0 0 14px;
+    font-size: 1rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #7de3f4;
+}
+
+.control-group {
+    padding: 12px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.control-group__title {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #9fb6cc;
+}
+
+.control {
+    display: grid;
+    grid-template-columns: 48px 1fr 44px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.control:last-child {
+    margin-bottom: 0;
+}
+
+.control__name {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #cfe6f7;
+}
+
+.control__value {
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: #7de3f4;
+}
+
+.control input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #22d3ee, #3b82f6);
+    outline: none;
+    cursor: pointer;
+}
+
+.control input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #eaf6ff;
+    border: 2px solid #22d3ee;
+    box-shadow: 0 0 8px rgba(34, 211, 238, 0.8);
+    transition: transform 0.1s ease;
+}
+
+.control input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+}
+
+.control input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #eaf6ff;
+    border: 2px solid #22d3ee;
+    box-shadow: 0 0 8px rgba(34, 211, 238, 0.8);
+}
+
+.controls__reset {
+    width: 100%;
+    margin-top: 14px;
+    padding: 9px 12px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #eaf6ff;
+    background: rgba(34, 211, 238, 0.15);
+    border: 1px solid rgba(34, 211, 238, 0.5);
+    border-radius: 9px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.controls__reset:hover {
+    background: rgba(34, 211, 238, 0.3);
+}
+
+@media (max-width: 640px) {
+    .controls {
+        width: calc(100% - 40px);
+        top: auto;
+        bottom: 20px;
+    }
+}

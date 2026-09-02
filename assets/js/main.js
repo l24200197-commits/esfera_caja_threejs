@@ -59,7 +59,46 @@ const sphere = new THREE.Mesh(
 );
 scene.add(sphere);
 
-const velocity = new THREE.Vector3(0.035, 0.027, 0.041);
+const DEFAULT_VELOCITY = { x: 0.035, y: 0.027, z: 0.041 };
+const velocity = new THREE.Vector3(
+    DEFAULT_VELOCITY.x,
+    DEFAULT_VELOCITY.y,
+    DEFAULT_VELOCITY.z
+);
+
+// ===== Caja de controles: desplazadores de velocidad =====
+const axisInputs = {
+    x: document.getElementById('velX'),
+    y: document.getElementById('velY'),
+    z: document.getElementById('velZ')
+};
+const axisOutputs = {
+    x: document.getElementById('velXOut'),
+    y: document.getElementById('velYOut'),
+    z: document.getElementById('velZOut')
+};
+
+function bindAxis(axis) {
+    const input = axisInputs[axis];
+    const output = axisOutputs[axis];
+    const apply = () => {
+        const value = parseFloat(input.value);
+        velocity[axis] = value;
+        output.textContent = value.toFixed(3);
+    };
+    input.addEventListener('input', apply);
+    apply();
+}
+
+['x', 'y', 'z'].forEach(bindAxis);
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+    sphere.position.set(0, 0, 0);
+    ['x', 'y', 'z'].forEach((axis) => {
+        axisInputs[axis].value = DEFAULT_VELOCITY[axis];
+        axisInputs[axis].dispatchEvent(new Event('input'));
+    });
+});
 
 // Marcas de impacto: anillos que aparecen al tocar una cara y se desvanecen
 const half = boxSize / 2;

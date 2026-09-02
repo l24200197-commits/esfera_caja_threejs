@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Reflector } from 'three/addons/objects/Reflector.js';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x07111f);
@@ -16,6 +17,10 @@ camera.lookAt(0, 0, 0);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -24,9 +29,19 @@ controls.dampingFactor = 0.05;
 controls.minDistance = 5;
 controls.maxDistance = 40;
 
-scene.add(new THREE.AmbientLight(0xffffff, 1.4));
+scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+scene.add(new THREE.HemisphereLight(0x9fd8ff, 0x1a2436, 0.6));
 const light = new THREE.DirectionalLight(0xffffff, 3);
-light.position.set(5, 8, 6);
+light.position.set(6, 12, 7);
+light.castShadow = true;
+light.shadow.mapSize.set(2048, 2048);
+light.shadow.camera.near = 1;
+light.shadow.camera.far = 45;
+light.shadow.camera.left = -12;
+light.shadow.camera.right = 12;
+light.shadow.camera.top = 12;
+light.shadow.camera.bottom = -12;
+light.shadow.bias = -0.0005;
 scene.add(light);
 
 const boxSize = 10;
@@ -54,6 +69,57 @@ const edges = new THREE.LineSegments(
 );
 scene.add(edges);
 
+// ===== Plano: piso espejo + rejilla luminosa + captador de sombras =====
+const floorY = -half;
+const FLOOR_SIZE = 60;
+
+const mirror = new Reflector(new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE), {
+    clipBias: 0.003,
+    textureWidth: Math.floor(window.innerWidth * Math.min(window.devicePixelRatio, 2)),
+    textureHeight: Math.floor(window.innerHeight * Math.min(window.devicePixelRatio, 2)),
+    color: 0x141e2c
+});
+mirror.rotation.x = -Math.PI / 2;
+mirror.position.y = floorY - 0.02;
+scene.add(mirror);
+
+const grid = new THREE.GridHelper(FLOOR_SIZE, 60, 0x36e0ff, 0x11405a);
+grid.position.y = floorY - 0.012;
+grid.material.transparent = true;
+grid.material.opacity = 0.35;
+grid.material.depthWrite = false;
+scene.add(grid);
+
+const shadowFloor = new THREE.Mesh(
+    new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE),
+    new THREE.ShadowMaterial({ opacity: 0.4 })
+);
+shadowFloor.rotation.x = -Math.PI / 2;
+shadowFloor.position.y = floorY - 0.005;
+shadowFloor.receiveShadow = true;
+scene.add(shadowFloor);
+
+// Halo reactivo bajo el piso: pulsa con cada choque
+const floorGlow = new THREE.Mesh(
+    new THREE.RingGeometry(half * 0.2, half * 1.35, 64),
+    new THREE.MeshBasicMaterial({
+        color: 0x36e0ff,
+        transparent: true,
+        opacity: 0,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+    })
+);
+floorGlow.rotation.x = -Math.PI / 2;
+floorGlow.position.y = floorY - 0.008;
+scene.add(floorGlow);
+let glowPulse = 0;
+
+function pulseFloor(amount) {
+    glowPulse = Math.min(glowPulse + amount, 1);
+}
+
 // ===== Esferas =====
 const sphereGeometry = new THREE.SphereGeometry(radius, 32, 32);
 const sphereColors = [
@@ -74,9 +140,14 @@ function addSphere() {
         sphereGeometry,
         new THREE.MeshStandardMaterial({
             color: sphereColors[spheres.length % sphereColors.length],
-            roughness: 0.35
+            roughness: 0.3,
+            metalness: 0.1,
+            emissive: sphereColors[spheres.length % sphereColors.length],
+            emissiveIntensity: 0.15
         })
     );
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     mesh.position.set(
         THREE.MathUtils.randFloat(-limit, limit),
         THREE.MathUtils.randFloat(-limit, limit),
@@ -345,6 +416,7 @@ function collideWithWalls(s) {
             spawnMarker(contact, normal);
             spawnSparks(contact, intensity, 0xfff2b0);
             playClack(intensity);
+            pulseFloor(intensity * 0.6);
         }
     }
 }
@@ -374,6 +446,7 @@ function collidePair(a, b) {
     const intensity = THREE.MathUtils.clamp(sep / 0.15, 0.15, 1);
     spawnSparks(contact, intensity, 0xbdecff);
     playClack(intensity);
+    pulseFloor(intensity * 0.4);
 }
 
 // ===== Bucle =====
@@ -398,6 +471,13 @@ function animate() {
     updateMarkers(delta);
     updateSparks(delta);
 
+    // halo del piso: decae suave y respira ligeramente
+    glowPulse = Math.max(glowPulse - delta * 1.6, 0);
+    const breathe = 0.04 + 0.02 * Math.sin(now * 0.002);
+    floorGlow.material.opacity = breathe + glowPulse * 0.6;
+    floorGlow.scale.setScalar(1 + glowPulse * 0.25);
+    grid.material.opacity = 0.3 + glowPulse * 0.35;
+
     controls.update();
     renderer.render(scene, camera);
 }
@@ -409,4 +489,9 @@ window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    const dpr = Math.min(window.devicePixelRatio, 2);
+    mirror.getRenderTarget().setSize(
+        Math.floor(window.innerWidth * dpr),
+        Math.floor(window.innerHeight * dpr)
+    );
 });

@@ -1,9 +1,15 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { Reflector } from 'three/addons/objects/Reflector.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x07111f);
+scene.background = new THREE.Color(0x05070c);
+scene.fog = new THREE.Fog(0x05070c, 20, 58);
 
 const camera = new THREE.PerspectiveCamera(
     60,
@@ -20,8 +26,13 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 0.95;
 document.body.appendChild(renderer.domElement);
+
+// Entorno HDR sintetico para reflejos/refracciones realistas
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.45;
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -29,9 +40,9 @@ controls.dampingFactor = 0.05;
 controls.minDistance = 5;
 controls.maxDistance = 40;
 
-scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-scene.add(new THREE.HemisphereLight(0x9fd8ff, 0x1a2436, 0.6));
-const light = new THREE.DirectionalLight(0xffffff, 3);
+scene.add(new THREE.AmbientLight(0xffffff, 1.1));
+scene.add(new THREE.HemisphereLight(0x9fd8ff, 0x1a2436, 0.8));
+const light = new THREE.DirectionalLight(0xffffff, 2.4);
 light.position.set(6, 12, 7);
 light.castShadow = true;
 light.shadow.mapSize.set(2048, 2048);
@@ -49,61 +60,62 @@ const radius = 0.5;
 const limit = boxSize / 2 - radius;
 const half = boxSize / 2;
 
-const boxGeometry = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
+// Cubo de cristal sin bordes: aristas ligeramente redondeadas que
+// atrapan la luz, transmision total y doble refraccion (grosor).
+const boxGeometry = new RoundedBoxGeometry(boxSize, boxSize, boxSize, 6, 0.12);
 const glassMaterial = new THREE.MeshPhysicalMaterial({
-    color: 0x8fd3ff,
-    transparent: true,
-    opacity: 0.18,
-    transmission: 0.9,
-    roughness: 0.05,
+    color: 0xffffff,
     metalness: 0,
+    roughness: 0.03,
+    transmission: 1,
+    ior: 1.48,
+    thickness: 0.35,
+    attenuationColor: new THREE.Color(0xcdeeff),
+    attenuationDistance: 3,
+    clearcoat: 1,
+    clearcoatRoughness: 0.06,
+    specularIntensity: 1,
+    envMapIntensity: 1.0,
     side: THREE.DoubleSide,
+    transparent: true,
     depthWrite: false
 });
 const glassBox = new THREE.Mesh(boxGeometry, glassMaterial);
+glassBox.renderOrder = 2;
 scene.add(glassBox);
 
-const edges = new THREE.LineSegments(
-    new THREE.EdgesGeometry(boxGeometry),
-    new THREE.LineBasicMaterial({ color: 0xbfe8ff })
-);
-scene.add(edges);
-
-// ===== Plano: piso espejo + rejilla luminosa + captador de sombras =====
+// ===== Plano: piso de obsidiana pulida + rejilla + sombras =====
 const floorY = -half;
-const FLOOR_SIZE = 60;
+const FLOOR_SIZE = 80;
 
-const mirror = new Reflector(new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE), {
-    clipBias: 0.003,
-    textureWidth: Math.floor(window.innerWidth * Math.min(window.devicePixelRatio, 2)),
-    textureHeight: Math.floor(window.innerHeight * Math.min(window.devicePixelRatio, 2)),
-    color: 0x141e2c
-});
-mirror.rotation.x = -Math.PI / 2;
-mirror.position.y = floorY - 0.02;
-scene.add(mirror);
+// Acabado realista tipo obsidiana pulida: reflejo suave del entorno
+// (sin espejo perfecto, para evitar destellos) y recibe las sombras.
+const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE),
+    new THREE.MeshStandardMaterial({
+        color: 0x05070c,
+        roughness: 0.45,
+        metalness: 0.0,
+        envMapIntensity: 0.25
+    })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = floorY - 0.02;
+floor.receiveShadow = true;
+scene.add(floor);
 
-const grid = new THREE.GridHelper(FLOOR_SIZE, 60, 0x36e0ff, 0x11405a);
+const grid = new THREE.GridHelper(60, 60, 0x2aa9cf, 0x123647);
 grid.position.y = floorY - 0.012;
 grid.material.transparent = true;
-grid.material.opacity = 0.35;
+grid.material.opacity = 0.26;
 grid.material.depthWrite = false;
 scene.add(grid);
 
-const shadowFloor = new THREE.Mesh(
-    new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE),
-    new THREE.ShadowMaterial({ opacity: 0.4 })
-);
-shadowFloor.rotation.x = -Math.PI / 2;
-shadowFloor.position.y = floorY - 0.005;
-shadowFloor.receiveShadow = true;
-scene.add(shadowFloor);
-
 // Halo reactivo bajo el piso: pulsa con cada choque
 const floorGlow = new THREE.Mesh(
-    new THREE.RingGeometry(half * 0.2, half * 1.35, 64),
+    new THREE.RingGeometry(half * 0.25, half * 1.05, 64),
     new THREE.MeshBasicMaterial({
-        color: 0x36e0ff,
+        color: 0x1e9fd0,
         transparent: true,
         opacity: 0,
         side: THREE.DoubleSide,
@@ -138,12 +150,13 @@ function randomSign() {
 function addSphere() {
     const mesh = new THREE.Mesh(
         sphereGeometry,
-        new THREE.MeshStandardMaterial({
+        new THREE.MeshPhysicalMaterial({
             color: sphereColors[spheres.length % sphereColors.length],
-            roughness: 0.3,
-            metalness: 0.1,
-            emissive: sphereColors[spheres.length % sphereColors.length],
-            emissiveIntensity: 0.15
+            roughness: 0.15,
+            metalness: 0,
+            clearcoat: 1,
+            clearcoatRoughness: 0.04,
+            envMapIntensity: 1.2
         })
     );
     mesh.castShadow = true;
@@ -449,6 +462,18 @@ function collidePair(a, b) {
     pulseFloor(intensity * 0.4);
 }
 
+// ===== Post-proceso: bloom cinematografico =====
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.32, // strength
+    0.5,  // radius
+    0.86  // threshold
+);
+composer.addPass(bloomPass);
+composer.addPass(new OutputPass());
+
 // ===== Bucle =====
 let lastTime = performance.now();
 
@@ -472,14 +497,14 @@ function animate() {
     updateSparks(delta);
 
     // halo del piso: decae suave y respira ligeramente
-    glowPulse = Math.max(glowPulse - delta * 1.6, 0);
-    const breathe = 0.04 + 0.02 * Math.sin(now * 0.002);
-    floorGlow.material.opacity = breathe + glowPulse * 0.6;
-    floorGlow.scale.setScalar(1 + glowPulse * 0.25);
-    grid.material.opacity = 0.3 + glowPulse * 0.35;
+    glowPulse = Math.max(glowPulse - delta * 1.8, 0);
+    const breathe = 0.015 + 0.01 * Math.sin(now * 0.002);
+    floorGlow.material.opacity = breathe + glowPulse * 0.4;
+    floorGlow.scale.setScalar(1 + glowPulse * 0.15);
+    grid.material.opacity = 0.28 + glowPulse * 0.3;
 
     controls.update();
-    renderer.render(scene, camera);
+    composer.render();
 }
 
 setSphereCount(parseInt(countInput.value, 10));
@@ -489,9 +514,6 @@ window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
-    const dpr = Math.min(window.devicePixelRatio, 2);
-    mirror.getRenderTarget().setSize(
-        Math.floor(window.innerWidth * dpr),
-        Math.floor(window.innerHeight * dpr)
-    );
+    composer.setSize(window.innerWidth, window.innerHeight);
+    bloomPass.resolution.set(window.innerWidth, window.innerHeight);
 });

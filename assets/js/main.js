@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x07111f);
@@ -16,6 +17,12 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.minDistance = 5;
+controls.maxDistance = 40;
 
 scene.add(new THREE.AmbientLight(0xffffff, 1.4));
 const light = new THREE.DirectionalLight(0xffffff, 3);
@@ -70,6 +77,7 @@ function animate() {
         sphere.position.z = THREE.MathUtils.clamp(sphere.position.z, -limit, limit);
     }
 
+    controls.update();
     renderer.render(scene, camera);
 }
 
